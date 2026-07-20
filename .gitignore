@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+config/.env
+config/youtube_token.json
+data/*.db
+Upload_Queue/*
+!Upload_Queue/.gitkeep
+Uploaded_Archive/*
+!Uploaded_Archive/.gitkeep
