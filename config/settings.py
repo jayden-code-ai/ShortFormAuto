@@ -18,6 +18,11 @@ YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID", "")
 YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
 YOUTUBE_TOKEN_FILE = BASE_DIR / "config" / "youtube_token.json"
 
+TIKTOK_CLIENT_KEY = os.getenv("TIKTOK_CLIENT_KEY", "")
+TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET", "")
+TIKTOK_REDIRECT_URI = "http://localhost:8921/callback"
+TIKTOK_TOKEN_FILE = BASE_DIR / "config" / "tiktok_token.json"
+
 QUEUE_DIR = BASE_DIR / "Upload_Queue"
 ARCHIVE_DIR = BASE_DIR / "Uploaded_Archive"
 DB_PATH = BASE_DIR / "data" / "upload_logs.db"
