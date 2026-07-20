@@ -34,7 +34,8 @@ Shortform_Auto/
 ├── Upload_Queue/             # 🚀 감시 대상 (여기에 mp4+json 투입)
 ├── Uploaded_Archive/         # 📦 전체 성공 시 이동
 ├── Failed_Uploads/           # ⚠️ 일부 실패 시 이동
-└── samples/                  # JSON 메타데이터 템플릿 + 작성 가이드
+├── samples/                  # JSON 메타데이터 템플릿 + 작성 가이드
+└── deploy/                   # launchd LaunchAgent plist + 설치/제거 스크립트
 ```
 
 ---
@@ -83,9 +84,37 @@ source venv/bin/activate && streamlit run dashboard.py
 
 ---
 
+## 자동 실행 설정 (launchd, 항상 켜진 Mac 권장)
+
+Mac을 항상 켜두고 외부에서 NAS에 파일만 던져 자동 업로드하려면, 데몬을 LaunchAgent로 등록합니다.
+(부팅/로그인 시 자동 시작 + 크래시 자동 재시작. 대시보드는 필요할 때만 별도로 실행.)
+
+```bash
+bash deploy/install_launchagent.sh          # 설치 + 즉시 기동
+launchctl print gui/$(id -u)/com.shortformauto.daemon | grep state   # 상태 확인
+tail -f ~/Library/Logs/shortformauto.err.log # 데몬 로그
+bash deploy/uninstall_launchagent.sh         # 제거
+```
+
+### ⚠️ 필수 사전 조건 2가지 (macOS 제약)
+1. **`~/Library/LaunchAgents` 쓰기 권한** — 이 폴더가 root 소유이면 설치가 실패합니다. 아래로 되돌리세요:
+   ```bash
+   sudo chown $(whoami):staff ~/Library/LaunchAgents && chmod 755 ~/Library/LaunchAgents
+   ```
+2. **Python에 전체 디스크 접근 권한(Full Disk Access)** — launchd 백그라운드 프로세스는 기본적으로
+   NAS(네트워크 볼륨) 접근이 TCC로 차단됩니다(`Operation not permitted`). 아래 앱을 허용 목록에 추가하세요:
+   - **시스템 설정 → 개인정보 보호 및 보안 → 전체 디스크 접근 권한** → `+` →
+     `Cmd+Shift+G`로 `/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app` 이동 → 추가 → 토글 ON
+   - 추가 후 데몬 재시작: `launchctl kickstart -k gui/$(id -u)/com.shortformauto.daemon`
+
+> 이 두 조건을 만족하지 않으면 데몬은 떠 있어도 NAS 파일을 감지/처리하지 못합니다.
+> (터미널에서 `python main.py`를 직접 실행하는 경우엔 터미널이 이미 권한을 가지므로 정상 동작합니다.)
+
+---
+
 ## 동작 흐름
 
-1. **감시** — `Upload_Queue`에서 `이름.mp4` + `이름.json` 쌍이 준비되면 트리거 (NAS 복사 완료까지 파일 크기 안정화 대기)
+1. **감시** — `Upload_Queue`에서 `이름.mp4` + `이름.json` 쌍이 준비되면 트리거 (NAS 복사 완료까지 파일 크기 안정화 대기). NAS에서 이벤트를 안정적으로 받기 위해 `PollingObserver`(주기적 폴링) 사용.
 2. **메타데이터 보완** — LLM 토글이 켜져 있고 `description`/`hashtags`가 비어 있으면 Claude가 생성
 3. **비동기 멀티 업로드** — 활성 플랫폼에 동시 전송 (한 곳이 실패해도 나머지는 계속 진행)
 4. **후처리** — 결과를 SQLite에 기록, 전체 성공 시 `Uploaded_Archive`로, 일부 실패 시 `Failed_Uploads`로 이동

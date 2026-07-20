@@ -54,6 +54,15 @@
 - **삽질 3 — 앱 자격증명**: 장기 토큰 교환 시 `.env`에 인스타 앱 ID/시크릿이 들어 있어 실패(코드 101). **메인 Facebook 앱**의 ID/시크릿으로 교체해야 했음.
 - 연결 후 페이지 직접 조회로 `instagram_business_account` 확인 → 실제 릴스 업로드 성공 → 60일 장기 토큰 발급(만료 7일 전 자동 갱신 로직 포함).
 
+### 추가 — NAS 대응 + 자동 실행(launchd)
+"항상 켜둔 Mac Mini + 외부에서 파일만 던지면 자동 업로드" 시나리오를 위해 데몬을 LaunchAgent로 상시 가동하려다 macOS 특유의 벽을 두 개 만남.
+
+- **삽질 1 — watchdog + NAS**: 기본 Observer(FSEvents)는 네트워크 마운트(NAS)에서 파일 생성 이벤트를 놓침. `PollingObserver`(주기적 폴링)로 바꿔 해결. 파일시스템 종류에 무관하게 동작.
+- **삽질 2 — launchd 하에서 로그가 안 보임**: launchd가 stdout/stderr를 파일로 리다이렉트하면 블록 버퍼링됨. `python -u`(언버퍼드)로 즉시 flush.
+- **삽질 3 — TCC가 백그라운드 NAS 접근 차단 (핵심)**: launchd 에이전트로 데몬을 띄우면 프로세스는 살아있는데 로그도 없고 파일도 감지 못 함. 스택을 떠보니(`sample`) `import` 중 NAS 파일 `open()`에서 멈춰 있었음. 단순 `ls`만 하는 에이전트로 격리 테스트하니 `Operation not permitted`(EPERM) → **macOS TCC가 백그라운드 프로세스의 네트워크 볼륨 접근을 차단**하는 것. 터미널/직접 실행은 이미 권한이 있어 됨. 해결: Python 실행 파일에 **전체 디스크 접근 권한(Full Disk Access)** 부여 (사용자 GUI 1회 작업).
+- **삽질 4 — `~/Library/LaunchAgents`가 root 소유**: 일반 사용자로 설치 불가 → `sudo chown`으로 소유권 복구 필요.
+- **검증 방식**: 데몬+파이프라인 자체는 수동 실행(`ENABLED_PLATFORMS="" python -u main.py`)으로 감지→처리→아카이브 이동까지 실제 확인(업로드는 비활성화해 실게시 방지). launchd 자동 실행의 최종 확인은 위 GUI/sudo 사전조건 충족 후 진행.
+
 ### Step 4~5 — 파이프라인 통합 + 대시보드
 - `core/pipeline.py`: 메타데이터 보완 → `asyncio.gather`로 3개 플랫폼 동시 업로드(`return_exceptions=True`로 한 곳 실패가 전체를 막지 않음) → SQLite 로깅 → 전체 성공은 `Uploaded_Archive`, 일부 실패는 `Failed_Uploads`로 이동.
 - LLM On/Off는 데몬과 대시보드가 `data/runtime_config.json`으로 공유(대시보드에서 토글하면 다음 처리부터 반영).
@@ -78,6 +87,7 @@
 ## 앞으로 확장할 만한 아이디어
 
 - **실행 간소화**: 데몬 + 대시보드 2개 프로세스를 하나로. Streamlit에 감시 스레드를 넣거나 "지금 업로드" 버튼 추가.
+- **venv 로컬 분리**: 라이브러리 로딩이 느리면 venv만 Mac 로컬(`~/`)로 옮기는 방안 (기획서에서 이미 언급). 단, 데몬은 어차피 NAS 접근이 필요하므로 TCC(Full Disk Access) 문제는 별개.
 - **공개 범위 통합 키**: `visibility: public|private`를 플랫폼별 값으로 매핑.
 - **실패 자동 재시도**: `Failed_Uploads` 항목을 재시도하거나, 성공한 플랫폼은 건너뛰고 실패분만 재업로드.
 - **예약 업로드**: 특정 시각에 게시.
