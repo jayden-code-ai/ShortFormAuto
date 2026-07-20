@@ -1,13 +1,11 @@
-"""백그라운드 데몬 실행 파일: Upload_Queue를 감시하고 쌍이 준비되면 처리한다."""
+"""백그라운드 데몬 실행 파일: Upload_Queue를 감시하고 쌍이 준비되면 전체 파이프라인을 실행한다."""
 
 import logging
 import time
-from pathlib import Path
 
-from core.monitor import start_monitor
-
-BASE_DIR = Path(__file__).resolve().parent
-QUEUE_DIR = BASE_DIR / "Upload_Queue"
+from config import settings
+from core import database
+from core.pipeline import process_pair
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,14 +14,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def on_pair_ready(mp4_path: Path, json_path: Path):
-    # TODO(Step 2~4): LLM 메타데이터 보완, 업로드, 아카이브 이동, 로깅
-    logger.info("처리 대상 쌍: %s / %s", mp4_path.name, json_path.name)
+def on_pair_ready(mp4_path, json_path):
+    try:
+        process_pair(mp4_path, json_path)
+    except Exception:
+        # 한 건의 처리 실패가 데몬 전체를 죽이지 않도록 방어한다.
+        logger.exception("파이프라인 처리 중 예외 발생: %s", mp4_path.name)
 
 
 def main():
-    QUEUE_DIR.mkdir(exist_ok=True)
-    observer = start_monitor(QUEUE_DIR, on_pair_ready)
+    settings.QUEUE_DIR.mkdir(exist_ok=True)
+    database.init_db()
+
+    # start_monitor는 watchdog observer를 띄우므로 import 시점 부작용을 피하기 위해 여기서 임포트
+    from core.monitor import start_monitor
+
+    observer = start_monitor(settings.QUEUE_DIR, on_pair_ready)
+    logger.info("데몬 시작 완료. 활성 플랫폼: %s", ", ".join(settings.ENABLED_PLATFORMS))
     try:
         while True:
             time.sleep(1)

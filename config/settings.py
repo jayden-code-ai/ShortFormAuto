@@ -8,8 +8,11 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / "config" / ".env")
 
-# LLM 메타데이터 자동 생성 기본값 (Step 5에서 대시보드 토글과 연동 예정)
+# LLM 메타데이터 자동 생성 기본값 (대시보드 토글의 초기값. 런타임 값은 runtime_config가 관리)
 LLM_ON = True
+
+# 업로드를 시도할 플랫폼 (토큰 미설정/보류 플랫폼은 여기서 제외하면 됨)
+ENABLED_PLATFORMS = ["youtube", "tiktok", "instagram"]
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 LLM_MODEL = "claude-haiku-4-5-20251001"
@@ -31,4 +34,6 @@ INSTAGRAM_TOKEN_FILE = BASE_DIR / "config" / "instagram_token.json"
 
 QUEUE_DIR = BASE_DIR / "Upload_Queue"
 ARCHIVE_DIR = BASE_DIR / "Uploaded_Archive"
+FAILED_DIR = BASE_DIR / "Failed_Uploads"
 DB_PATH = BASE_DIR / "data" / "upload_logs.db"
+RUNTIME_CONFIG_PATH = BASE_DIR / "data" / "runtime_config.json"

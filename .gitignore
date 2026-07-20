@@ -7,7 +7,10 @@ config/youtube_token.json
 config/tiktok_token.json
 config/instagram_token.json
 data/*.db
+data/runtime_config.json
 Upload_Queue/*
 !Upload_Queue/.gitkeep
 Uploaded_Archive/*
 !Uploaded_Archive/.gitkeep
+Failed_Uploads/*
+!Failed_Uploads/.gitkeep

@@ -7,6 +7,7 @@ from pathlib import Path
 from anthropic import Anthropic
 
 from config import settings
+from core import runtime_config
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +54,8 @@ def enrich_metadata(json_path: Path) -> dict:
     needs_description = not metadata.get("description")
     needs_hashtags = not metadata.get("hashtags")
 
-    if not settings.LLM_ON:
-        logger.info("LLM_ON=False, 원본 메타데이터 그대로 사용: %s", json_path.name)
+    if not runtime_config.get_llm_on():
+        logger.info("LLM Off, 원본 메타데이터 그대로 사용: %s", json_path.name)
         return metadata
 
     if not (needs_description or needs_hashtags):
