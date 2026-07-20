@@ -5,9 +5,13 @@ import time
 from pathlib import Path
 
 from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+# NAS(SMB/AFP) 네트워크 마운트에서는 FSEvents 기반 기본 Observer가 이벤트를 놓치는 경우가 있어,
+# 파일시스템 종류에 무관하게 동작하는 PollingObserver를 사용한다.
+from watchdog.observers.polling import PollingObserver
 
 logger = logging.getLogger(__name__)
+
+POLL_INTERVAL = 2.0  # 폴링 주기(초)
 
 STABLE_CHECK_INTERVAL = 1.0  # 초 단위 크기 재확인 간격
 STABLE_CHECK_COUNT = 2  # 연속으로 크기가 동일해야 "쓰기 완료"로 판단
@@ -68,7 +72,7 @@ class UploadQueueHandler(FileSystemEventHandler):
 
 def start_monitor(queue_dir: Path, on_pair_ready) -> Observer:
     handler = UploadQueueHandler(queue_dir, on_pair_ready)
-    observer = Observer()
+    observer = PollingObserver(timeout=POLL_INTERVAL)
     observer.schedule(handler, str(queue_dir), recursive=False)
     observer.start()
     logger.info("모니터링 시작: %s", queue_dir)

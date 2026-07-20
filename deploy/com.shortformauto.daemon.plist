@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Shortform Auto Uploader 백그라운드 데몬 LaunchAgent
+
+  - LaunchAgent(사용자 세션)로 등록해야 NAS(/Volumes/...) 사용자 마운트가 보인다.
+  - 부팅/로그인 시 자동 시작(RunAtLoad) + 크래시 자동 재시작(KeepAlive).
+  - NAS 미마운트로 python 실행 실패 시 launchd가 주기적으로 재시도한다.
+  - 설치: deploy/install_launchagent.sh 실행
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.shortformauto.daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Volumes/01_Main_Workspace/10_Projects/12_Dev_Personal/Shortform_Auto/venv/bin/python</string>
+        <string>-u</string>
+        <string>/Volumes/01_Main_Workspace/10_Projects/12_Dev_Personal/Shortform_Auto/main.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Volumes/01_Main_Workspace/10_Projects/12_Dev_Personal/Shortform_Auto</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jayden/Library/Logs/shortformauto.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/jayden/Library/Logs/shortformauto.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

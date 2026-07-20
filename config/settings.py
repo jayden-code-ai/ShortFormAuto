@@ -12,7 +12,12 @@ load_dotenv(BASE_DIR / "config" / ".env")
 LLM_ON = True
 
 # 업로드를 시도할 플랫폼 (토큰 미설정/보류 플랫폼은 여기서 제외하면 됨)
-ENABLED_PLATFORMS = ["youtube", "tiktok", "instagram"]
+# 환경변수 ENABLED_PLATFORMS로 재정의 가능 (쉼표 구분, 빈 문자열이면 업로드 없이 파이프라인만 동작)
+_platforms_env = os.getenv("ENABLED_PLATFORMS")
+if _platforms_env is not None:
+    ENABLED_PLATFORMS = [p.strip() for p in _platforms_env.split(",") if p.strip()]
+else:
+    ENABLED_PLATFORMS = ["youtube", "tiktok", "instagram"]
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 LLM_MODEL = "claude-haiku-4-5-20251001"
