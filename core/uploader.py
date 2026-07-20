@@ -80,7 +80,124 @@ async def upload_to_youtube_async(mp4_path: Path, metadata: dict) -> dict:
     return await asyncio.to_thread(upload_to_youtube, mp4_path, metadata)
 
 
-# TODO: Instagram Graph API 자격증명 발급 완료 후 upload_to_instagram(_async) 추가
+INSTAGRAM_API_VERSION = "v23.0"
+# Facebook Login 방식: 로컬 파일 직접 업로드(resumable)를 지원하므로 graph.facebook.com을 사용한다.
+INSTAGRAM_GRAPH_BASE = f"https://graph.facebook.com/{INSTAGRAM_API_VERSION}"
+INSTAGRAM_TOKEN_REFRESH_MARGIN = 7 * 24 * 3600  # 만료 7일 전부터 미리 갱신
+
+
+def _instagram_raise_for_status(resp: requests.Response) -> None:
+    if not resp.ok:
+        logger.error("인스타그램 API 오류 응답 (%s): %s", resp.status_code, resp.text)
+    resp.raise_for_status()
+
+
+def _get_instagram_access_token() -> str:
+    if not settings.INSTAGRAM_TOKEN_FILE.exists():
+        raise RuntimeError(
+            "인스타그램 장기 토큰이 없습니다. 먼저 `python authorize_instagram.py`를 실행하세요."
+        )
+    data = json.loads(settings.INSTAGRAM_TOKEN_FILE.read_text())
+    if "access_token" not in data:
+        raise RuntimeError(f"저장된 인스타그램 토큰이 유효하지 않습니다: {data}")
+
+    obtained_at = data.get("obtained_at", 0)
+    expires_in = data.get("expires_in", 0)
+    if time.time() > obtained_at + expires_in - INSTAGRAM_TOKEN_REFRESH_MARGIN:
+        # Facebook Login 장기 토큰은 fb_exchange_token으로 재교환하여 만료를 연장한다.
+        resp = requests.get(
+            f"{INSTAGRAM_GRAPH_BASE}/oauth/access_token",
+            params={
+                "grant_type": "fb_exchange_token",
+                "client_id": settings.INSTAGRAM_APP_ID,
+                "client_secret": settings.INSTAGRAM_APP_SECRET,
+                "fb_exchange_token": data["access_token"],
+            },
+        )
+        _instagram_raise_for_status(resp)
+        new_data = resp.json()
+        if "access_token" not in new_data:
+            raise RuntimeError(f"인스타그램 토큰 갱신 실패: {new_data}")
+        new_data["obtained_at"] = int(time.time())
+        settings.INSTAGRAM_TOKEN_FILE.write_text(json.dumps(new_data, ensure_ascii=False, indent=2))
+        data = new_data
+
+    return data["access_token"]
+
+
+def _instagram_poll_status(access_token: str, container_id: str, timeout: int = 180, interval: int = 5) -> str:
+    elapsed = 0
+    while elapsed < timeout:
+        resp = requests.get(
+            f"{INSTAGRAM_GRAPH_BASE}/{container_id}",
+            params={"fields": "status_code", "access_token": access_token},
+        )
+        _instagram_raise_for_status(resp)
+        status = resp.json().get("status_code")
+        if status in ("FINISHED", "ERROR", "EXPIRED"):
+            return status
+        time.sleep(interval)
+        elapsed += interval
+    return "TIMEOUT"
+
+
+def upload_to_instagram(mp4_path: Path, metadata: dict) -> dict:
+    """인스타그램 릴스로 영상을 업로드한다 (resumable 방식 - 공개 URL 불필요, 파일 바이트 직접 전송)."""
+    access_token = _get_instagram_access_token()
+    ig_user_id = settings.INSTAGRAM_BUSINESS_ACCOUNT_ID
+
+    caption = metadata.get("description", "")
+    hashtags = " ".join(metadata.get("hashtags", []))
+    if hashtags:
+        caption = f"{caption}\n\n{hashtags}".strip()
+
+    create_resp = requests.post(
+        f"{INSTAGRAM_GRAPH_BASE}/{ig_user_id}/media",
+        params={
+            "access_token": access_token,
+            "media_type": "REELS",
+            "upload_type": "resumable",
+            "caption": caption,
+        },
+    )
+    _instagram_raise_for_status(create_resp)
+    create_data = create_resp.json()
+    if "id" not in create_data:
+        raise RuntimeError(f"인스타그램 컨테이너 생성 실패: {create_data}")
+    container_id = create_data["id"]
+
+    video_size = mp4_path.stat().st_size
+    with open(mp4_path, "rb") as f:
+        video_bytes = f.read()
+
+    upload_resp = requests.post(
+        f"https://rupload.facebook.com/ig-api-upload/{INSTAGRAM_API_VERSION}/{container_id}",
+        headers={
+            "Authorization": f"OAuth {access_token}",
+            "offset": "0",
+            "file_size": str(video_size),
+        },
+        data=video_bytes,
+    )
+    _instagram_raise_for_status(upload_resp)
+
+    status = _instagram_poll_status(access_token, container_id)
+    if status != "FINISHED":
+        raise RuntimeError(f"인스타그램 영상 처리 실패: status={status}")
+
+    publish_resp = requests.post(
+        f"{INSTAGRAM_GRAPH_BASE}/{ig_user_id}/media_publish",
+        params={"access_token": access_token, "creation_id": container_id},
+    )
+    _instagram_raise_for_status(publish_resp)
+    media_id = publish_resp.json().get("id")
+
+    logger.info("인스타그램 업로드 완료: media_id=%s", media_id)
+    return {"platform": "instagram", "media_id": media_id}
+
+
+async def upload_to_instagram_async(mp4_path: Path, metadata: dict) -> dict:
+    return await asyncio.to_thread(upload_to_instagram, mp4_path, metadata)
 
 
 TIKTOK_API_BASE = "https://open.tiktokapis.com/v2"

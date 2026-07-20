@@ -23,6 +23,12 @@ TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET", "")
 TIKTOK_REDIRECT_URI = "http://localhost:8921/callback"
 TIKTOK_TOKEN_FILE = BASE_DIR / "config" / "tiktok_token.json"
 
+INSTAGRAM_APP_ID = os.getenv("INSTAGRAM_APP_ID", "")
+INSTAGRAM_APP_SECRET = os.getenv("INSTAGRAM_APP_SECRET", "")
+INSTAGRAM_SEED_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN", "")
+INSTAGRAM_BUSINESS_ACCOUNT_ID = os.getenv("INSTAGRAM_BUSINESS_ACCOUNT_ID", "")
+INSTAGRAM_TOKEN_FILE = BASE_DIR / "config" / "instagram_token.json"
+
 QUEUE_DIR = BASE_DIR / "Upload_Queue"
 ARCHIVE_DIR = BASE_DIR / "Uploaded_Archive"
 DB_PATH = BASE_DIR / "data" / "upload_logs.db"
