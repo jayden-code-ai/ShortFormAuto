@@ -125,6 +125,16 @@ def _get_instagram_access_token() -> str:
     return data["access_token"]
 
 
+def ensure_instagram_token() -> str:
+    """만료가 임박한 인스타그램 토큰을 미리 갱신한다.
+
+    장기 토큰은 60일마다 만료되는데 기존에는 업로드가 실행될 때만 갱신됐다.
+    한동안 업로드가 없으면 그대로 만료돼 재인증이 필요하므로, 데몬이 주기적으로
+    이 함수를 호출해 업로드 여부와 무관하게 토큰을 살려둔다.
+    """
+    return _get_instagram_access_token()
+
+
 def _instagram_poll_status(access_token: str, container_id: str, timeout: int = 180, interval: int = 5) -> str:
     elapsed = 0
     while elapsed < timeout:
