@@ -178,7 +178,10 @@ bash deploy/uninstall_launchagent.sh          # 제거
 |------|-----------|
 | 맥미니 본체 | `http://localhost:8501` |
 | 같은 와이파이 (폰·노트북) | `http://<맥미니 LAN IP>:8501` |
-| 집 밖 | Tailscale 연결 후 `http://<맥미니 Tailscale IP>:8501` |
+| **집 밖 (Tailscale)** | **`http://jaydens-mac-mini:8501`** (MagicDNS) 또는 `http://100.117.77.86:8501` |
+
+집 밖에서는 접속 기기(아이폰 등)의 Tailscale이 켜져 있어야 하고, 맥미니가 전원이 켜진 상태여야 합니다.
+데몬·대시보드 모두 부팅 시 자동 실행되므로 맥미니만 켜두면 됩니다.
 
 ### Tailscale 설정 (권장)
 포트포워딩 없이 기기끼리 암호화된 사설망을 만듭니다. 공유기 설정을 건드리지 않아 안전합니다.
