@@ -38,7 +38,15 @@
     <key>StandardErrorPath</key>
     <string>/Users/jayden/Library/Logs/shortformauto.err.log</string>
 
+    <!--
+      ProcessType은 반드시 Standard 여야 한다.
+      Background로 두면 launchd가 강한 I/O 스로틀링을 걸어, NAS(네트워크 볼륨)에서
+      import 시 stat/close 시스템콜이 극단적으로 느려진다(터미널 10초 -> launchd 4분+ 미완).
+    -->
     <key>ProcessType</key>
-    <string>Background</string>
+    <string>Standard</string>
+
+    <key>LowPriorityIO</key>
+    <false/>
 </dict>
 </plist>

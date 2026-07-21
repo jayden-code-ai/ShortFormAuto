@@ -55,13 +55,16 @@
 - 연결 후 페이지 직접 조회로 `instagram_business_account` 확인 → 실제 릴스 업로드 성공 → 60일 장기 토큰 발급(만료 7일 전 자동 갱신 로직 포함).
 
 ### 추가 — NAS 대응 + 자동 실행(launchd)
-"항상 켜둔 Mac Mini + 외부에서 파일만 던지면 자동 업로드" 시나리오를 위해 데몬을 LaunchAgent로 상시 가동하려다 macOS 특유의 벽을 두 개 만남.
+"항상 켜둔 Mac Mini + 외부에서 파일만 던지면 자동 업로드" 시나리오를 위해 데몬을 LaunchAgent로 상시 가동하려다 macOS 특유의 벽을 여러 개 만남.
 
 - **삽질 1 — watchdog + NAS**: 기본 Observer(FSEvents)는 네트워크 마운트(NAS)에서 파일 생성 이벤트를 놓침. `PollingObserver`(주기적 폴링)로 바꿔 해결. 파일시스템 종류에 무관하게 동작.
 - **삽질 2 — launchd 하에서 로그가 안 보임**: launchd가 stdout/stderr를 파일로 리다이렉트하면 블록 버퍼링됨. `python -u`(언버퍼드)로 즉시 flush.
 - **삽질 3 — TCC가 백그라운드 NAS 접근 차단 (핵심)**: launchd 에이전트로 데몬을 띄우면 프로세스는 살아있는데 로그도 없고 파일도 감지 못 함. 스택을 떠보니(`sample`) `import` 중 NAS 파일 `open()`에서 멈춰 있었음. 단순 `ls`만 하는 에이전트로 격리 테스트하니 `Operation not permitted`(EPERM) → **macOS TCC가 백그라운드 프로세스의 네트워크 볼륨 접근을 차단**하는 것. 터미널/직접 실행은 이미 권한이 있어 됨. 해결: Python 실행 파일에 **전체 디스크 접근 권한(Full Disk Access)** 부여 (사용자 GUI 1회 작업).
 - **삽질 4 — `~/Library/LaunchAgents`가 root 소유**: 일반 사용자로 설치 불가 → `sudo chown`으로 소유권 복구 필요.
-- **검증 방식**: 데몬+파이프라인 자체는 수동 실행(`ENABLED_PLATFORMS="" python -u main.py`)으로 감지→처리→아카이브 이동까지 실제 확인(업로드는 비활성화해 실게시 방지). launchd 자동 실행의 최종 확인은 위 GUI/sudo 사전조건 충족 후 진행.
+- **삽질 5 — `ProcessType: Background`의 I/O 스로틀링 (재부팅 후 발견)**: Full Disk Access를 부여했는데도 데몬이 여전히 `STAT=U`(중단 불가 대기)로 로그 한 줄 없이 멈춰 있었음. 처음엔 TCC가 안 풀린 줄 알았으나, `lsof`로 보니 NAS의 `venv/.../pydantic_core.so`가 **정상적으로 열려 있었음** → 차단이 아니었음. `sample`을 다시 떠보니 단일 지점 정지가 아니라 `stat` 856회 / `close` 811회에 시간이 분산 → **차단이 아니라 극단적으로 느린 것**. 원인은 plist의 `ProcessType: Background`로, launchd가 이 프로세스에 강한 I/O 스로틀링을 걸어 지연이 큰 네트워크 볼륨에서 import가 사실상 진행되지 않았던 것. `Standard`로 변경(+`LowPriorityIO: false`) 후 해결.
+  - 측정치: `Background` = 4분+ 경과에도 미완료 / `Standard` = 약 75초에 기동 완료 / 터미널 직접 실행 = 10초. launchd 하에서는 여전히 7배가량 느리지만 상시 구동 데몬이므로 수용 가능.
+  - **교훈**: "프로세스는 살아있는데 아무 반응 없음"을 곧바로 권한 문제로 단정하지 말 것. `lsof`(무엇을 열었나) + `sample`(어디에 시간을 쓰나)로 **차단 / 느림**을 먼저 구분해야 함. EPERM은 즉시 실패로 나타나고, 스로틀링은 무한 대기처럼 보인다.
+- **검증 방식**: 데몬+파이프라인은 launchd 기동 상태에서 설치본 plist에만 `ENABLED_PLATFORMS=""`를 임시 주입해 실게시 없이 검증(저장소 plist는 그대로 두고, 테스트 후 install 스크립트 재실행으로 원복). 결과: 쌍 감지 → 안정화 대기 → LLM 메타데이터 보완(실 API 호출 200 OK, launchd 환경에서도 `.env` 로딩 정상) → `Uploaded_Archive` 이동까지 전 구간 확인. 이후 운영 설정(3개 플랫폼 활성)으로 복구 완료.
 
 ### Step 4~5 — 파이프라인 통합 + 대시보드
 - `core/pipeline.py`: 메타데이터 보완 → `asyncio.gather`로 3개 플랫폼 동시 업로드(`return_exceptions=True`로 한 곳 실패가 전체를 막지 않음) → SQLite 로깅 → 전체 성공은 `Uploaded_Archive`, 일부 실패는 `Failed_Uploads`로 이동.
