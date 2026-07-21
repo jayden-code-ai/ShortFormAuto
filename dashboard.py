@@ -13,11 +13,14 @@ import pandas as pd
 import streamlit as st
 
 from config import settings
-from core import database, metrics, queue_writer, runtime_config, status
+from core import auth, database, metrics, queue_writer, runtime_config, status
 from core.llm_helper import generate_metadata
 from core.pipeline import retry_failed
 
 st.set_page_config(page_title="Shortform Auto Uploader", page_icon="🎬", layout="wide")
+
+# 외부에서 접근 가능한 환경이므로 어떤 내용도 그리기 전에 인증을 먼저 통과시킨다.
+auth.require_password()
 
 database.init_db()
 

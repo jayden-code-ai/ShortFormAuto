@@ -1,0 +1,26 @@
+#!/bin/bash
+# 대시보드가 떠 있으면 브라우저만 열고, 꺼져 있으면 LaunchAgent를 깨운 뒤 기다렸다 연다.
+URL="http://localhost:8501"
+LABEL="com.shortformauto.dashboard"
+
+notify() { osascript -e "display notification \"$1\" with title \"Shortform 대시보드\"" 2>/dev/null || true; }
+
+if ! curl -s -o /dev/null --max-time 2 "$URL"; then
+    notify "대시보드를 시작하는 중입니다..."
+    launchctl kickstart "gui/$(id -u)/$LABEL" 2>/dev/null \
+        || launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/$LABEL.plist" 2>/dev/null \
+        || true
+
+    # NAS에서 기동하는 데 시간이 걸리므로 넉넉히 기다린다.
+    for _ in $(seq 1 60); do
+        curl -s -o /dev/null --max-time 2 "$URL" && break
+        sleep 2
+    done
+fi
+
+if curl -s -o /dev/null --max-time 2 "$URL"; then
+    open "$URL"
+else
+    notify "대시보드를 시작하지 못했습니다. 로그를 확인하세요."
+    open -a Console "$HOME/Library/Logs/shortformauto.dashboard.err.log" 2>/dev/null || true
+fi

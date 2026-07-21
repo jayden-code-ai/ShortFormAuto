@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Streamlit 대시보드 LaunchAgent
+
+  - 부팅/로그인 시 자동 시작(RunAtLoad) + 종료 시 자동 재시작(KeepAlive).
+  - headless로 띄우므로 브라우저는 자동으로 열리지 않는다.
+    Dock의 "대시보드 열기" 앱이나 북마크로 접속한다.
+  - 서버는 모든 인터페이스에 바인딩되어 LAN/Tailscale에서 접근할 수 있다.
+    반드시 .streamlit/secrets.toml 의 dashboard_password 로 잠금을 걸어둘 것.
+  - 설치: deploy/install_launchagent.sh 실행
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.shortformauto.dashboard</string>
+
+    <!--
+      venv/bin/streamlit(스크립트)을 직접 실행하면 안 된다.
+      launchd가 스크립트를 실행할 경우 전체 디스크 접근 권한이 적용되지 않아
+      pyvenv.cfg 읽기부터 'Operation not permitted'로 실패한다.
+      권한이 부여된 python 바이너리로 -m streamlit 을 호출해야 한다.
+    -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Volumes/01_Main_Workspace/10_Projects/12_Dev_Personal/Shortform_Auto/venv/bin/python</string>
+        <string>-u</string>
+        <string>-m</string>
+        <string>streamlit</string>
+        <string>run</string>
+        <string>/Volumes/01_Main_Workspace/10_Projects/12_Dev_Personal/Shortform_Auto/dashboard.py</string>
+        <string>--server.headless</string>
+        <string>true</string>
+        <string>--server.port</string>
+        <string>8501</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Volumes/01_Main_Workspace/10_Projects/12_Dev_Personal/Shortform_Auto</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jayden/Library/Logs/shortformauto.dashboard.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/jayden/Library/Logs/shortformauto.dashboard.err.log</string>
+
+    <!--
+      데몬과 동일하게 Standard 여야 한다.
+      Background로 두면 launchd의 I/O 스로틀링 때문에 NAS에서 기동이 사실상 불가능하다.
+    -->
+    <key>ProcessType</key>
+    <string>Standard</string>
+
+    <key>LowPriorityIO</key>
+    <false/>
+</dict>
+</plist>
