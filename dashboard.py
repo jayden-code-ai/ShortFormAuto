@@ -7,12 +7,14 @@
 """
 
 from datetime import date, datetime
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
 from config import settings
-from core import database, metrics, runtime_config, status
+from core import database, metrics, queue_writer, runtime_config, status
+from core.llm_helper import generate_metadata
 from core.pipeline import retry_failed
 
 st.set_page_config(page_title="Shortform Auto Uploader", page_icon="🎬", layout="wide")
@@ -121,9 +123,100 @@ def _render_failures(df: pd.DataFrame) -> None:
 logs = database.get_recent_logs(limit=1000)
 log_df = _logs_dataframe(logs)
 
-tab_home, tab_history, tab_perf, tab_retry = st.tabs(
-    ["📊 대시보드", "📅 업로드 내역", "📈 성과", "🔁 실패 재시도"]
+tab_new, tab_home, tab_history, tab_perf, tab_retry = st.tabs(
+    ["➕ 업로드 만들기", "📊 대시보드", "📅 업로드 내역", "📈 성과", "🔁 실패 재시도"]
 )
+
+
+# --- 탭 0: 업로드 만들기 (영상 + 메타데이터를 큐에 배치) ---
+with tab_new:
+    st.caption(
+        "영상을 올리고 내용을 채우면 mp4와 json을 **같은 이름으로 자동 생성**해 "
+        "`Upload_Queue`에 넣습니다. 파일명을 직접 맞출 필요가 없습니다."
+    )
+
+    uploaded = st.file_uploader("영상 파일", type=["mp4", "mov"], key="new_video")
+
+    if uploaded is None:
+        st.info("영상을 올리면 메타데이터 입력 폼이 나타납니다.")
+    else:
+        # 새 파일을 올리면 이전 입력이 남지 않도록 초기화한다.
+        if st.session_state.get("_loaded_video") != uploaded.name:
+            st.session_state["_loaded_video"] = uploaded.name
+            st.session_state["form_title"] = Path(uploaded.name).stem
+            st.session_state["form_desc"] = ""
+            st.session_state["form_tags"] = ""
+
+        col_video, col_form = st.columns([1, 2])
+
+        with col_video:
+            st.video(uploaded)
+            st.caption(f"{uploaded.name} · {uploaded.size / 1024 / 1024:.1f}MB")
+            st.caption(f"저장될 이름: `{queue_writer.sanitize_stem(uploaded.name)}`")
+
+        with col_form:
+            st.text_input("제목", key="form_title")
+
+            if st.button("✨ LLM으로 설명·해시태그 초안 생성", width="stretch"):
+                title = st.session_state.get("form_title", "").strip()
+                if not title:
+                    st.warning("먼저 제목을 입력해주세요.")
+                else:
+                    with st.spinner("Claude가 초안을 작성하는 중..."):
+                        try:
+                            draft = generate_metadata(title)
+                            st.session_state["form_desc"] = draft.get("description", "")
+                            st.session_state["form_tags"] = " ".join(draft.get("hashtags", []))
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"초안 생성 실패: {exc}")
+
+            st.text_area("설명", key="form_desc", height=140)
+            st.text_input(
+                "해시태그",
+                key="form_tags",
+                help="쉼표나 공백으로 구분하세요. # 없이 적어도 자동으로 붙습니다.",
+            )
+
+            privacy_choice = st.selectbox(
+                "공개 범위",
+                ["비공개 (권장)", "YouTube 공개", "TikTok 전체공개"],
+                help="플랫폼마다 값 체계가 달라 현재는 한 번에 한 플랫폼 기준만 지정할 수 있습니다. "
+                "인스타그램은 API 특성상 항상 즉시 공개됩니다.",
+            )
+            privacy_map = {
+                "비공개 (권장)": None,  # 생략하면 각 플랫폼의 안전한 기본값 사용
+                "YouTube 공개": "public",
+                "TikTok 전체공개": "PUBLIC_TO_EVERYONE",
+            }
+
+            preview = queue_writer.build_metadata(
+                st.session_state.get("form_title", ""),
+                st.session_state.get("form_desc", ""),
+                st.session_state.get("form_tags", ""),
+                privacy_map[privacy_choice],
+            )
+            with st.expander("생성될 JSON 미리보기"):
+                st.json(preview)
+
+            if st.button("📥 Upload_Queue에 넣기", type="primary", width="stretch"):
+                if not preview["title"]:
+                    st.error("제목을 입력해주세요.")
+                else:
+                    try:
+                        result = queue_writer.write_to_queue(
+                            uploaded.getvalue(), uploaded.name, preview
+                        )
+                        st.success(
+                            f"`{result['stem']}` 을(를) 대기열에 넣었습니다. "
+                            "데몬이 곧 업로드를 시작합니다."
+                        )
+                        # 폼과 업로더를 비워 다음 영상을 바로 올릴 수 있게 한다.
+                        for key in ("_loaded_video", "form_title", "form_desc", "form_tags", "new_video"):
+                            st.session_state.pop(key, None)
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"대기열 배치 실패: {exc}")
 
 
 # --- 탭 1: 대시보드 ---

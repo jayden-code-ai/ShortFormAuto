@@ -36,7 +36,12 @@ def _parse_json_response(raw_text: str) -> dict:
     return json.loads(text)
 
 
-def _generate_metadata(title: str) -> dict:
+def generate_metadata(title: str) -> dict:
+    """제목만으로 description/hashtags 초안을 만든다.
+
+    대시보드의 '초안 생성' 버튼처럼 사용자가 명시적으로 요청한 경우에도 쓰이므로,
+    여기서는 LLM On/Off 토글을 확인하지 않는다(토글은 자동 보완 경로에만 적용).
+    """
     client = _get_client()
     message = client.messages.create(
         model=settings.LLM_MODEL,
@@ -44,6 +49,10 @@ def _generate_metadata(title: str) -> dict:
         messages=[{"role": "user", "content": PROMPT_TEMPLATE.format(title=title)}],
     )
     return _parse_json_response(message.content[0].text)
+
+
+# 기존 호출부 호환용 별칭
+_generate_metadata = generate_metadata
 
 
 def enrich_metadata(json_path: Path) -> dict:
