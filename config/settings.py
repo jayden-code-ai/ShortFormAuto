@@ -25,6 +25,12 @@ LLM_MODEL = "claude-haiku-4-5-20251001"
 YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID", "")
 YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
 YOUTUBE_TOKEN_FILE = BASE_DIR / "config" / "youtube_token.json"
+# 인증 스크립트와 업로더가 같은 값을 써야 하므로 여기서만 정의한다.
+# readonly는 업로드한 영상의 통계(조회수/댓글수) 조회에 필요하다.
+YOUTUBE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+]
 
 TIKTOK_CLIENT_KEY = os.getenv("TIKTOK_CLIENT_KEY", "")
 TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET", "")

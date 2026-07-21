@@ -21,7 +21,7 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+YOUTUBE_SCOPES = settings.YOUTUBE_SCOPES
 
 
 def _get_youtube_service():
